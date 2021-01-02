@@ -69,7 +69,7 @@ UNICODE_PIECE_SYMBOLS = {
     "Q": "♕", "q": "♛",
     "K": "♔", "k": "♚",
     "P": "♙", "p": "♟",
-    "c": "c", "C": "C",
+    "C": "C", "c": "c",
 }
 
 FILE_NAMES = ["a", "b", "c", "d", "e", "f", "g", "h"]
@@ -422,7 +422,7 @@ class Piece:
 
     def symbol(self) -> str:
         """
-        Gets the symbol ``P``, ``N``, ``B``, ``R``, ``Q`` or ``K`` for white
+        Gets the symbol ``P``, ``N``, ``B``, ``R``, ``Q``, ``K``, or ``C`` for white
         pieces or the lower-case variants for the black pieces.
         """
         symbol = piece_symbol(self.piece_type)
@@ -622,7 +622,7 @@ class BaseBoard:
             bb = self.queens
         elif piece_type == KING:
             bb = self.kings
-        elif piece_type = CAVALRY:
+        elif piece_type == CAVALRY:
             bb = self.cavalry
 
         return bb & self.occupied_co[color]
@@ -661,6 +661,8 @@ class BaseBoard:
             return ROOK
         elif self.queens & mask:
             return QUEEN
+        elif self.cavalry & mask:
+            return CAVALRY
         else:
             return KING
 
@@ -1662,6 +1664,17 @@ class Board(BaseBoard):
                 else:
                     yield Move(from_square, to_square)
 
+        # Generate cavalry promotions.
+        if self.is_variant_mounted_chess():
+            capturers = pawns
+            for from_square in scan_reversed(capturers):
+                targets = (
+                    BB_PAWN_ATTACKS[self.turn][from_square]
+                    & self.knights & self.occupied_co[self.turn] & to_mask)
+    
+                for to_square in scan_reversed(targets):
+                    yield Move(from_square, to_square, CAVALRY)
+
         # Prepare pawn advance generation.
         if self.turn == WHITE:
             single_moves = pawns << 8 & ~self.occupied
@@ -1869,6 +1882,12 @@ class Board(BaseBoard):
     def is_variant_draw(self) -> bool:
         """
         Checks if a variant-specific drawing condition is fulfilled.
+        """
+        return False
+
+    def is_variant_mounted_chess(self) -> bool:
+        """
+        Checks if the current board is for the variant called Mounted Chess.
         """
         return False
 
@@ -3606,8 +3625,8 @@ class Board(BaseBoard):
         return move
 
     def _transposition_key(self) -> Hashable:
-        return (self.pawns, self.knights, self.cavalry, self.bishops, 
-                self.rooks, self.queens, self.kings,
+        return (self.pawns, self.knights, self.bishops, 
+                self.rooks, self.queens, self.kings, self.cavalry, 
                 self.occupied_co[WHITE], self.occupied_co[BLACK],
                 self.turn, self.clean_castling_rights(),
                 self.ep_square if self.has_legal_en_passant() else None)
