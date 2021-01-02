@@ -4337,7 +4337,7 @@ class MountedKnightVariantTestCase(unittest.TestCase):
         for move in board.generate_pseudo_legal_moves():
             board.push(move)
             boardstr = repr(board)
-            if "c" in boardstr.tolower():
+            if "c" in boardstr.lower():
                 cavalry_boards.append(boardstr)
             board.pop()
 
