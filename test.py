@@ -4336,13 +4336,14 @@ class MountedKnightVariantTestCase(unittest.TestCase):
         cavalry_boards = []
         for move in board.generate_pseudo_legal_moves():
             board.push(move)
-            boardstr = repr(board)
+            boardstr = str(board)
             if "c" in boardstr.lower():
                 cavalry_boards.append(boardstr)
             board.pop()
 
         if not len(cavalry_boards):
             self.fail("It didn't generate any cavalry moves.")
+        print()
         for cb in cavalry_boards:
             print(cb)
             print()
