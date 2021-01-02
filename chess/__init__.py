@@ -731,7 +731,8 @@ class BaseBoard:
         attackers = (
             (BB_KING_ATTACKS[square] & self.kings) |
             (BB_KNIGHT_ATTACKS[square] & self.knights) |
-            (BB_CAVALRY_ATTACKS[square] & self.cavalry) |
+            (BB_KNIGHT_ATTACKS[square] & self.cavalry) |
+            (BB_PAWN_ATTACKS[not color][square] & self.cavalry) |
             (BB_RANK_ATTACKS[square][rank_pieces] & queens_and_rooks) |
             (BB_FILE_ATTACKS[square][file_pieces] & queens_and_rooks) |
             (BB_DIAG_ATTACKS[square][diag_pieces] & queens_and_bishops) |
