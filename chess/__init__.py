@@ -52,9 +52,9 @@ COLORS = [WHITE, BLACK] = [True, False]
 COLOR_NAMES = ["black", "white"]
 
 PieceType = int
-PIECE_TYPES = [PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING] = range(1, 7)
-PIECE_SYMBOLS = [None, "p", "n", "b", "r", "q", "k"]
-PIECE_NAMES = [None, "pawn", "knight", "bishop", "rook", "queen", "king"]
+PIECE_TYPES = [PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, CAVALRY] = range(1, 8)
+PIECE_SYMBOLS = [None, "p", "n", "b", "r", "q", "k", "c"]
+PIECE_NAMES = [None, "pawn", "knight", "bishop", "rook", "queen", "king", "cavalry"]
 
 def piece_symbol(piece_type: PieceType) -> str:
     return typing.cast(str, PIECE_SYMBOLS[piece_type])
@@ -69,6 +69,7 @@ UNICODE_PIECE_SYMBOLS = {
     "Q": "♕", "q": "♛",
     "K": "♔", "k": "♚",
     "P": "♙", "p": "♟",
+    "c": "c", "C": "C",
 }
 
 FILE_NAMES = ["a", "b", "c", "d", "e", "f", "g", "h"]
@@ -577,6 +578,7 @@ class BaseBoard:
         self.rooks = BB_CORNERS
         self.queens = BB_D1 | BB_D8
         self.kings = BB_E1 | BB_E8
+        self.cavalry = BB_EMPTY
 
         self.promoted = BB_EMPTY
 
@@ -595,6 +597,7 @@ class BaseBoard:
         self.rooks = BB_EMPTY
         self.queens = BB_EMPTY
         self.kings = BB_EMPTY
+        self.cavalry = BB_EMPTY
 
         self.promoted = BB_EMPTY
 
@@ -619,6 +622,8 @@ class BaseBoard:
             bb = self.queens
         elif piece_type == KING:
             bb = self.kings
+        elif piece_type = CAVALRY:
+            bb = self.cavalry
 
         return bb & self.occupied_co[color]
 
@@ -690,6 +695,9 @@ class BaseBoard:
             return BB_KNIGHT_ATTACKS[square]
         elif bb_square & self.kings:
             return BB_KING_ATTACKS[square]
+        elif bb_square & self.cavalry:
+            color = bool(bb_square & self.occupied_co[WHITE])
+            return BB_KNIGHT_ATTACKS[square] | BB_PAWN_ATTACKS[color][square]
         else:
             attacks = 0
             if bb_square & self.bishops or bb_square & self.queens:
@@ -721,6 +729,7 @@ class BaseBoard:
         attackers = (
             (BB_KING_ATTACKS[square] & self.kings) |
             (BB_KNIGHT_ATTACKS[square] & self.knights) |
+            (BB_CAVALRY_ATTACKS[square] & self.cavalry) |
             (BB_RANK_ATTACKS[square][rank_pieces] & queens_and_rooks) |
             (BB_FILE_ATTACKS[square][file_pieces] & queens_and_rooks) |
             (BB_DIAG_ATTACKS[square][diag_pieces] & queens_and_bishops) |
@@ -814,6 +823,8 @@ class BaseBoard:
             self.pawns ^= mask
         elif piece_type == KNIGHT:
             self.knights ^= mask
+        elif piece_type == CAVALRY:
+            self.cavalry ^= mask
         elif piece_type == BISHOP:
             self.bishops ^= mask
         elif piece_type == ROOK:
@@ -851,6 +862,8 @@ class BaseBoard:
             self.pawns |= mask
         elif piece_type == KNIGHT:
             self.knights |= mask
+        elif piece_type == CAVALRY:
+            self.cavalry |= mask
         elif piece_type == BISHOP:
             self.bishops |= mask
         elif piece_type == ROOK:
@@ -1221,6 +1234,7 @@ class BaseBoard:
                 self.occupied_co[WHITE] == board.occupied_co[WHITE] and
                 self.pawns == board.pawns and
                 self.knights == board.knights and
+                self.cavalry == board.cavalry and
                 self.bishops == board.bishops and
                 self.rooks == board.rooks and
                 self.queens == board.queens and
@@ -1231,6 +1245,7 @@ class BaseBoard:
     def apply_transform(self, f: Callable[[Bitboard], Bitboard]) -> None:
         self.pawns = f(self.pawns)
         self.knights = f(self.knights)
+        self.cavalry = f(self.cavalry)
         self.bishops = f(self.bishops)
         self.rooks = f(self.rooks)
         self.queens = f(self.queens)
@@ -1283,6 +1298,7 @@ class BaseBoard:
 
         board.pawns = self.pawns
         board.knights = self.knights
+        board.cavalry = self.cavalry
         board.bishops = self.bishops
         board.rooks = self.rooks
         board.queens = self.queens
@@ -1333,6 +1349,7 @@ class _BoardState(Generic[BoardT]):
     def __init__(self, board: BoardT) -> None:
         self.pawns = board.pawns
         self.knights = board.knights
+        self.cavalry = board.cavalry
         self.bishops = board.bishops
         self.rooks = board.rooks
         self.queens = board.queens
@@ -1353,6 +1370,7 @@ class _BoardState(Generic[BoardT]):
     def restore(self, board: BoardT) -> None:
         board.pawns = self.pawns
         board.knights = self.knights
+        board.cavalry = self.cavalry
         board.bishops = self.bishops
         board.rooks = self.rooks
         board.queens = self.queens
@@ -1610,8 +1628,8 @@ class Board(BaseBoard):
     def generate_pseudo_legal_moves(self, from_mask: Bitboard = BB_ALL, to_mask: Bitboard = BB_ALL) -> Iterator[Move]:
         our_pieces = self.occupied_co[self.turn]
 
-        # Generate piece moves.
-        non_pawns = our_pieces & ~self.pawns & from_mask
+        # Generate piece(non-cavalry) moves.
+        non_pawns = our_pieces & ~self.pawns & ~self.cavalry & from_mask
         for from_square in scan_reversed(non_pawns):
             moves = self.attacks_mask(from_square) & ~our_pieces & to_mask
             for to_square in scan_reversed(moves):
@@ -1621,10 +1639,12 @@ class Board(BaseBoard):
         if from_mask & self.kings:
             yield from self.generate_castling_moves(from_mask, to_mask)
 
-        # The remaining moves are all pawn moves.
+        # The remaining moves are all pawn and cavalry moves.
         pawns = self.pawns & self.occupied_co[self.turn] & from_mask
         if not pawns:
             return
+
+        cavalry = self.cavalry & self.occupied_co[self.turn] & from_mask
 
         # Generate pawn captures.
         capturers = pawns
@@ -1674,6 +1694,36 @@ class Board(BaseBoard):
         if self.ep_square:
             yield from self.generate_pseudo_legal_ep(from_mask, to_mask)
 
+        # Generate cavalry captures.
+        capturers = cavalry
+        for from_square in scan_reversed(capturers):
+            targets = (
+                BB_PAWN_ATTACKS[self.turn][from_square] &
+                self.occupied_co[not self.turn] & to_mask)
+
+            for to_square in scan_reversed(targets):
+                yield Move(from_square, to_square)
+
+        # Prepare cavalry advance generation.
+        if self.turn == WHITE:
+            single_moves = cavalry << 8 & ~self.occupied
+            double_moves = single_moves << 8 & ~self.occupied & (BB_RANK_3 | BB_RANK_4)
+        else:
+            single_moves = cavalry >> 8 & ~self.occupied
+            double_moves = single_moves >> 8 & ~self.occupied & (BB_RANK_6 | BB_RANK_5)
+
+        single_moves &= to_mask
+        double_moves &= to_mask
+
+        # Generate single cavalry moves.
+        for to_square in scan_reversed(single_moves):
+            from_square = to_square + (8 if self.turn == BLACK else -8)
+            yield Move(from_square, to_square)
+
+        # Generate en passant cavalry captures.
+        if self.ep_square:
+            yield from self.generate_pseudo_legal_ep(from_mask, to_mask)
+
     def generate_pseudo_legal_ep(self, from_mask: Bitboard = BB_ALL, to_mask: Bitboard = BB_ALL) -> Iterator[Move]:
         if not self.ep_square or not BB_SQUARES[self.ep_square] & to_mask:
             return
@@ -1682,7 +1732,7 @@ class Board(BaseBoard):
             return
 
         capturers = (
-            self.pawns & self.occupied_co[self.turn] & from_mask &
+            (self.pawns | self.cavalry) & self.occupied_co[self.turn] & from_mask &
             BB_PAWN_ATTACKS[not self.turn][self.ep_square] &
             BB_RANKS[4 if self.turn else 3])
 
@@ -3556,8 +3606,8 @@ class Board(BaseBoard):
         return move
 
     def _transposition_key(self) -> Hashable:
-        return (self.pawns, self.knights, self.bishops, self.rooks,
-                self.queens, self.kings,
+        return (self.pawns, self.knights, self.cavalry, self.bishops, 
+                self.rooks, self.queens, self.kings,
                 self.occupied_co[WHITE], self.occupied_co[BLACK],
                 self.turn, self.clean_castling_rights(),
                 self.ep_square if self.has_legal_en_passant() else None)

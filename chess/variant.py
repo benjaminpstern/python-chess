@@ -854,6 +854,82 @@ class CrazyhouseBoard(chess.Board):
 
         return status
 
+class MountedChessBoard(chess.Board):
+
+    aliases = ["Mounted Chess"]
+    uci_variant = "mountedchess"
+    xboard_variant = "mountedchess"
+
+    tbw_suffix = None
+    tbz_suffix = None
+    tbw_magic = None
+    tbz_magic = None
+
+    def __init__(self, fen: Optional[str] = starting_fen, chess960: bool = False) -> None:
+        super().__init__(fen, chess960=chess960)
+
+    def reset(self) -> None:
+        self.set_fen(type(self).starting_fen)
+
+    def is_legal(self, move: chess.Move) -> bool:
+        return super().is_legal(move) and not self.gives_check(move)
+
+    def generate_legal_moves(self, from_mask: chess.Bitboard = chess.BB_ALL, to_mask: chess.Bitboard = chess.BB_ALL) -> Iterator[chess.Move]:
+        for move in super().generate_legal_moves(from_mask, to_mask):
+            if not self.gives_check(move):
+                yield move
+
+    def is_variant_end(self) -> bool:
+        if not self.kings & chess.BB_RANK_8:
+            return False
+
+        black_kings = self.kings & self.occupied_co[chess.BLACK]
+        if self.turn == chess.WHITE or black_kings & chess.BB_RANK_8 or not black_kings:
+            return True
+
+        # White has reached the backrank. The game is over if black can not
+        # also reach the backrank on the next move. Check if there are any
+        # safe squares for the king.
+        black_king = chess.msb(black_kings)
+        targets = chess.BB_KING_ATTACKS[black_king] & chess.BB_RANK_8 & ~self.occupied_co[chess.BLACK]
+        return all(self.attackers_mask(chess.WHITE, target) for target in chess.scan_forward(targets))
+
+    def is_variant_draw(self) -> bool:
+        in_goal = self.kings & chess.BB_RANK_8
+        return all(in_goal & side for side in self.occupied_co)
+
+    def is_variant_loss(self) -> bool:
+        return self.is_variant_end() and not self.kings & self.occupied_co[self.turn] & chess.BB_RANK_8
+
+    def is_variant_win(self) -> bool:
+        in_goal = self.kings & chess.BB_RANK_8
+        return (
+            self.is_variant_end() and
+            bool(in_goal & self.occupied_co[self.turn]) and
+            not in_goal & self.occupied_co[not self.turn])
+
+    def has_insufficient_material(self, color: chess.Color) -> bool:
+        return False
+
+    def status(self) -> chess.Status:
+        status = super().status()
+        if self.is_check():
+            status |= chess.STATUS_RACE_CHECK | chess.STATUS_TOO_MANY_CHECKERS
+        if self.turn == chess.BLACK and all(self.occupied_co[co] & self.kings & chess.BB_RANK_8 for co in chess.COLORS):
+            status |= chess.STATUS_RACE_OVER
+        if self.pawns:
+            status |= chess.STATUS_RACE_MATERIAL
+        for color in chess.COLORS:
+            if chess.popcount(self.occupied_co[color] & self.knights) > 2:
+                status |= chess.STATUS_RACE_MATERIAL
+            if chess.popcount(self.occupied_co[color] & self.bishops) > 2:
+                status |= chess.STATUS_RACE_MATERIAL
+            if chess.popcount(self.occupied_co[color] & self.rooks) > 2:
+                status |= chess.STATUS_RACE_MATERIAL
+            if chess.popcount(self.occupied_co[color] & self.queens) > 1:
+                status |= chess.STATUS_RACE_MATERIAL
+        return status
+
 
 VARIANTS: List[Type[chess.Board]] = [
     chess.Board,
