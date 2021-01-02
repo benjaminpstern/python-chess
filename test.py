@@ -4324,3 +4324,25 @@ if __name__ == "__main__":
     logging.getLogger().addHandler(raise_log_handler)
 
     unittest.main()
+
+class MountedKnightVariantTestCase(unittest.TestCase):
+    def test_basic(self):
+        board = chess.variant.MountedChessBoard()
+        Nf3 = chess.Move.from_uci("g1f3")
+        board.push(Nf3)
+        Nf6 = chess.Move.from_uci("g8f6")
+        board.push(Nf6)
+
+        cavalry_boards = []
+        for move in board.generate_pseudo_legal_moves():
+            board.push(move)
+            boardstr = repr(board)
+            if "c" in boardstr.tolower():
+                cavalry_boards.append(boardstr)
+            board.pop()
+
+        if not len(cavalry_boards):
+            self.fail("It didn't generate any cavalry moves.")
+        for cb in cavalry_boards:
+            print(cb)
+            print()
